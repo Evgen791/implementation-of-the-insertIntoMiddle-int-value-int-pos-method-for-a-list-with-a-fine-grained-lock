@@ -1,0 +1,116 @@
+#include <iostream>
+#include <mutex>
+
+// Отсальной код
+struct Node
+{
+    int value;
+    std::mutex* node_mutex;
+    Node* next;
+
+    Node() : value{0}, node_mutex{nullptr}, next{nullptr} {}
+    Node(int value, std::mutex* mtx = nullptr, Node* nxt = nullptr)
+        : value{value}, node_mutex{mtx}, next{nxt} {}
+};
+
+class FineGrainedQueue
+{
+public:
+  FineGrainedQueue() 
+  {
+    head = new Node;  // Инициализируем голову очереди пустым узлом
+    queue_mutex = new std::mutex;  // Инициализируем мьютекс для синхронизации доступа к очереди
+  }
+  ~FineGrainedQueue()  // Деструктор очереди
+  {
+    clear();  // Удаляем все узлы
+    delete queue_mutex;  // Освобождаем память мьютекса
+  }
+  
+  void clear()  // Очистка очереди
+  {
+    std::lock_guard<std::mutex> queue_lock(*queue_mutex);  // Блокировка очереди на время очистки
+
+    Node* current = head;  // Проходим по каждому узлу в очереди
+    while(current)
+    {
+      Node* next = current->next;
+      
+      delete current->node_mutex;  // Удаляем мьютекс узла
+      delete current;  // Удаляем текущий узел
+
+      current = next;  // Переходим к следующему узлу
+    }
+
+    head = nullptr;  // устанавливаем голову очереди в nullptr
+  }
+  
+  int size()  // Получение размера очереди
+  {
+    std::lock_guard<std::mutex> queue_lock(*queue_mutex);  // Блокировка очереди на время подсчета размера
+    int size = 0;  // Инициализация счетчика размера
+    Node* current = head;  // Начинаем с головы очереди
+    while(current)
+    {
+      ++size;  // инкрементируем счетчик на каждом узле
+      current = current->next;  // Переходим к следующему узлу
+    }
+    return size;  // Возвращаем размер очереди
+  }
+  
+  void insertIntoMiddle(int value, int pos)  // Вставка элемента в середину очереди
+  {
+    std::lock_guard<std::mutex> queue_lock(*queue_mutex);  // Блокировка очереди на время вставки
+
+    Node* current = head;   
+    Node* previous = nullptr;
+
+    // Проходим по списку до желаемой позиции или до конца списка
+    for (int i = 0; i < pos && current != nullptr; i++)
+    {
+        previous = current;
+        current = current->next;
+    }
+
+    // Создаем новый узел
+    Node* new_node = new Node;
+    new_node->value = value;
+    new_node->next = current;
+    new_node->node_mutex = new std::mutex;
+
+    // Соединяем предыдущий узел с новым узлом, или обновляем голову списка
+    if (previous)
+    {
+        previous->next = new_node;
+    }
+    else
+    {
+        head = new_node;
+    }
+}
+
+private:
+  Node* head;  // Голова очереди
+  std::mutex* queue_mutex;  // Мьютекс очереди
+};
+
+
+int main()
+{
+    FineGrainedQueue fgq;  // Создаем объект очереди
+
+    std::cout << "Начальный размер очереди: " << fgq.size() << std::endl;
+
+    fgq.insertIntoMiddle(1, 0);  // Вставляем элементы в разные позиции
+    fgq.insertIntoMiddle(2, 1);
+    fgq.insertIntoMiddle(3, 2);
+    fgq.insertIntoMiddle(4, 1);  // Вставка в середину
+
+    std::cout << "Размер очереди после вставки: " << fgq.size() << std::endl;
+
+    fgq.clear();  // Очищаем очередь
+
+    std::cout << "Размер очереди после очистки: " << fgq.size() << std::endl;
+
+    return 0;
+}
